@@ -5,9 +5,6 @@
 #include <liburing.h>
 #include <fcntl.h>
 
-#include <pthread.h>
-
-
 #define QUEUE_DEPTH 16
 #define BLOCK_SZ 4096
 #include <sys/ioctl.h>
@@ -45,8 +42,6 @@ off_t get_file_size(int fd) {
     return -1;
 }
 
-int file_fd;
-struct io_uring ring;
 
 
 
@@ -72,13 +67,6 @@ int submit_read_request(int fd, struct io_uring *ring) {
 	return stat;
 }
 
-
-void *submit_read_request_thread(void * arg) {
-	while(1) submit_read_request(file_fd,&ring);
-
-}
-
-
 int get_read_completion(struct io_uring * ring) {
 	struct io_uring_cqe *cqe;
 	int ret = io_uring_wait_cqe(ring, &cqe);
@@ -94,6 +82,7 @@ int get_read_completion(struct io_uring * ring) {
 
 int main (int argc, char**argv) {
 	int stat;
+	struct io_uring ring;
 	if (argc < 2) {
 		fprintf(stderr, "Usage: %s [file name]\n", argv[0]);
 		return 1;
@@ -103,7 +92,7 @@ int main (int argc, char**argv) {
 		return -1;
 	}
 
-	file_fd = open(argv[1], O_RDONLY|O_DIRECT);
+	int file_fd = open(argv[1], O_RDONLY|O_DIRECT);
 	if (file_fd < 0) {
 		fprintf(stderr,"failed to open %s %d\n", argv[1], file_fd);
 		return -1;
@@ -111,12 +100,8 @@ int main (int argc, char**argv) {
 	off_t file_size = get_file_size(file_fd);
 	printf("%s size: %jd\n", argv[1], (intmax_t)file_size);
 	
-	pthread_t  thread;
-	pthread_create(& thread, NULL ,submit_read_request_thread,NULL);
-
-
 	while(1) {
-//		submit_read_request(file_fd, &ring);
+		submit_read_request(file_fd, &ring);
 		stat = get_read_completion( &ring);
 		if (stat < BLOCK_SZ) break;
 	}
